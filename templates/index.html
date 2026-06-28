@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Trading Card Condition Analyzer</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>AI Trading Card Condition Analyzer</h1>
+    <p class="subtitle">Upload a card image to estimate centering, wear, and grade range.</p>
+
+    <form id="analyze-form" class="card">
+      <label for="image">Card image</label>
+      <input id="image" name="image" type="file" accept="image/*" required />
+      <button type="submit">Analyze</button>
+    </form>
+
+    <section id="status" class="status"></section>
+
+    <section id="summary" class="card hidden">
+      <h2>Estimate</h2>
+      <div class="grid">
+        <div><strong>Grade range:</strong> <span id="grade-range">-</span></div>
+        <div><strong>Centering (L/R):</strong> <span id="center-lr">-</span></div>
+        <div><strong>Centering (T/B):</strong> <span id="center-tb">-</span></div>
+        <div><strong>Edge wear:</strong> <span id="edge-wear">-</span></div>
+        <div><strong>Surface damage score:</strong> <span id="surface-score">-</span></div>
+      </div>
+      <h3>Reasoning</h3>
+      <ul id="reasons"></ul>
+    </section>
+
+    <section id="raw-section" class="card hidden">
+      <h2>Raw analysis JSON</h2>
+      <pre id="raw-json"></pre>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById("analyze-form");
+    const statusEl = document.getElementById("status");
+    const summaryEl = document.getElementById("summary");
+    const rawSectionEl = document.getElementById("raw-section");
+    const rawJsonEl = document.getElementById("raw-json");
+    const reasonsEl = document.getElementById("reasons");
+
+    const gradeRangeEl = document.getElementById("grade-range");
+    const centerLREl = document.getElementById("center-lr");
+    const centerTBEl = document.getElementById("center-tb");
+    const edgeWearEl = document.getElementById("edge-wear");
+    const surfaceScoreEl = document.getElementById("surface-score");
+
+    function setStatus(message, type = "info") {
+      statusEl.textContent = message;
+      statusEl.className = `status ${type}`;
+    }
+
+    function clearResults() {
+      summaryEl.classList.add("hidden");
+      rawSectionEl.classList.add("hidden");
+      reasonsEl.innerHTML = "";
+      rawJsonEl.textContent = "";
+    }
+
+    function renderResults(data) {
+      gradeRangeEl.textContent = data.summary?.estimated_grade_range ?? "-";
+      centerLREl.textContent = data.summary?.centering_lr ?? "-";
+      centerTBEl.textContent = data.summary?.centering_tb ?? "-";
+      edgeWearEl.textContent = data.summary?.edge_wear_level ?? "-";
+      surfaceScoreEl.textContent = String(data.summary?.surface_damage_score ?? "-");
+
+      const reasons = data.grading?.reasons ?? [];
+      reasonsEl.innerHTML = "";
+      for (const reason of reasons) {
+        const li = document.createElement("li");
+        li.textContent = reason;
+        reasonsEl.appendChild(li);
+      }
+
+      rawJsonEl.textContent = JSON.stringify(data, null, 2);
+      summaryEl.classList.remove("hidden");
+      rawSectionEl.classList.remove("hidden");
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearResults();
+
+      const imageInput = document.getElementById("image");
+      if (!imageInput.files || imageInput.files.length === 0) {
+        setStatus("Please choose an image first.", "error");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("image", imageInput.files[0]);
+
+      setStatus("Analyzing image...", "info");
+
+      try {
+        const response = await fetch("/analyze", {
+          method: "POST",
+          body: formData
+        });
+
+        const payload = await response.json();
+        if (!response.ok) {
+          const message = payload.detail || "Analysis request failed.";
+          throw new Error(message);
+        }
+
+        renderResults(payload);
+        setStatus("Analysis complete.", "success");
+      } catch (error) {
+        setStatus(error.message || "Unexpected error during analysis.", "error");
+      }
+    });
+  </script>
+</body>
+</html>
+
