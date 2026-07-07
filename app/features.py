@@ -13,12 +13,8 @@ def _find_peak_index(profile: np.ndarray, start: int, end: int) -> int:
     end = min(end, profile.shape[0])
     if end - start <= 3:
         return (start + end) // 2
-
-    segment = profile[start:end].astype(np.float32)
-    window = max(5, int(segment.shape[0] * 0.08))
-    kernel = np.ones(window, dtype=np.float32) / float(window)
-    smoothed = np.convolve(segment, kernel, mode="same")
-    return int(start + int(np.argmax(smoothed)))
+    segment = profile[start:end]
+    return int(start + int(np.argmax(segment)))
 
 
 def extract_centering_metrics(card_image: np.ndarray) -> dict:
@@ -31,20 +27,41 @@ def extract_centering_metrics(card_image: np.ndarray) -> dict:
     vertical_profile = grad_x.mean(axis=0)
     horizontal_profile = grad_y.mean(axis=1)
 
+    # Smooth the entire profiles first to avoid boundary shifts near segment edges
+    window_x = max(3, int(vertical_profile.shape[0] * 0.01))
+    kernel_x = np.ones(window_x, dtype=np.float32) / float(window_x)
+    smoothed_x = np.convolve(vertical_profile, kernel_x, mode="same")
+
+    window_y = max(3, int(horizontal_profile.shape[0] * 0.01))
+    kernel_y = np.ones(window_y, dtype=np.float32) / float(window_y)
+    smoothed_y = np.convolve(horizontal_profile, kernel_y, mode="same")
+
     height, width = gray.shape
 
-    left_transition = _find_peak_index(vertical_profile, int(width * 0.05), int(width * 0.45))
-    right_transition = _find_peak_index(vertical_profile, int(width * 0.55), int(width * 0.95))
-    top_transition = _find_peak_index(horizontal_profile, int(height * 0.05), int(height * 0.45))
-    bottom_transition = _find_peak_index(horizontal_profile, int(height * 0.55), int(height * 0.95))
+    left_transition = _find_peak_index(smoothed_x, int(width * 0.02), int(width * 0.18))
+    right_transition = _find_peak_index(smoothed_x, int(width * 0.82), int(width * 0.98))
+    top_transition = _find_peak_index(smoothed_y, int(height * 0.02), int(height * 0.18))
+    bottom_transition = _find_peak_index(smoothed_y, int(height * 0.82), int(height * 0.98))
 
-    if right_transition <= left_transition:
-        right_transition = int(width * 0.8)
-        left_transition = int(width * 0.2)
+    # Get peak values on raw profiles to validate they are real transition edges
+    left_peak_val = vertical_profile[left_transition]
+    right_peak_val = vertical_profile[right_transition]
+    top_peak_val = horizontal_profile[top_transition]
+    bottom_peak_val = horizontal_profile[bottom_transition]
 
-    if bottom_transition <= top_transition:
-        bottom_transition = int(height * 0.8)
-        top_transition = int(height * 0.2)
+    # Validate transitions (minimum gradient magnitude + coordinate check) and fallback if invalid
+    MIN_GRADIENT_THRESHOLD = 1.0
+    if (right_transition <= left_transition or 
+        left_peak_val < MIN_GRADIENT_THRESHOLD or 
+        right_peak_val < MIN_GRADIENT_THRESHOLD):
+        left_transition = int(width * 0.06)
+        right_transition = int(width * 0.94)
+
+    if (bottom_transition <= top_transition or 
+        top_peak_val < MIN_GRADIENT_THRESHOLD or 
+        bottom_peak_val < MIN_GRADIENT_THRESHOLD):
+        top_transition = int(height * 0.06)
+        bottom_transition = int(height * 0.94)
 
     left_border = max(1, left_transition)
     right_border = max(1, width - right_transition)
