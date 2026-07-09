@@ -134,8 +134,8 @@ def analyze_edges_and_corners(card_image: np.ndarray) -> dict:
     border_edge_density = float(np.count_nonzero(edges[border_mask == 1])) / float(border_pixels)
     border_std = float(np.std(gray[border_mask == 1]))
 
-    edge_density_component = min(1.0, border_edge_density / 0.14)
-    border_std_component = min(1.0, border_std / 60.0)
+    edge_density_component = min(1.0, border_edge_density / 0.35)
+    border_std_component = min(1.0, border_std / 120.0)
     edge_wear_score = _clamp(0.7 * edge_density_component + 0.3 * border_std_component, 0.0, 1.0)
 
     patch_size = max(16, int(min(height, width) * 0.12))
@@ -153,7 +153,7 @@ def analyze_edges_and_corners(card_image: np.ndarray) -> dict:
         patch_std = float(np.std(patch))
 
         patch_score = _clamp(
-            0.65 * min(1.0, patch_edge_density / 0.18) + 0.35 * min(1.0, patch_std / 65.0),
+            0.65 * min(1.0, patch_edge_density / 0.40) + 0.35 * min(1.0, patch_std / 130.0),
             0.0,
             1.0,
         )

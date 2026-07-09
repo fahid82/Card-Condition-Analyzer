@@ -53,25 +53,40 @@ def _heuristic_surface_assessment(card_image: np.ndarray) -> dict:
     scratch_signal = (float(np.mean(bright_lines)) + float(np.mean(dark_lines))) / 255.0
     scratch_probability = _clamp(scratch_signal * 4.0)
 
+    # Calculate discoloration on the border only (as the border should have uniform color)
+    h, w = gray.shape
+    border_band = max(6, int(min(h, w) * 0.04))
+    border_mask = np.zeros_like(gray, dtype=np.uint8)
+    border_mask[:border_band, :] = 1
+    border_mask[-border_band:, :] = 1
+    border_mask[:, :border_band] = 1
+    border_mask[:, -border_band:] = 1
+
     lab = cv2.cvtColor(card_image, cv2.COLOR_BGR2LAB)
-    a_std = float(np.std(lab[:, :, 1]))
-    b_std = float(np.std(lab[:, :, 2]))
-    discolor_probability = _clamp((a_std + b_std) / 70.0)
+    a_border = lab[:, :, 1][border_mask == 1]
+    b_border = lab[:, :, 2][border_mask == 1]
+    a_std = float(np.std(a_border)) if len(a_border) > 0 else 0.0
+    b_std = float(np.std(b_border)) if len(b_border) > 0 else 0.0
+    discolor_probability = _clamp((a_std + b_std) / 80.0)
 
+    # Normal sharpness variance is typically 1000-4000. Only flag as noise if exceptionally high
     laplacian_variance = float(cv2.Laplacian(denoised, cv2.CV_64F).var())
-    noise_probability = _clamp(laplacian_variance / 1500.0)
+    noise_probability = _clamp((laplacian_variance - 8000.0) / 10000.0, 0.0, 1.0)
 
+    # Focus damage score on scratch probability (discoloration/noise add minor adjustments only if very high)
     damage_score = _clamp(
-        0.6 * scratch_probability + 0.25 * discolor_probability + 0.15 * noise_probability
+        1.0 * scratch_probability + 
+        0.10 * _clamp(discolor_probability - 0.5, 0.0, 1.0) +
+        0.05 * noise_probability
     )
     clean_probability = _clamp(1.0 - damage_score * 0.9)
 
     findings: list[str] = []
     if scratch_probability >= 0.4:
         findings.append("Potential scratch patterns detected.")
-    if discolor_probability >= 0.45:
+    if discolor_probability >= 0.7:
         findings.append("Possible color inconsistency/discoloration detected.")
-    if noise_probability >= 0.45:
+    if noise_probability >= 0.7:
         findings.append("Surface texture appears noisy.")
     if not findings:
         findings.append("No strong surface damage signals detected by heuristic analysis.")
