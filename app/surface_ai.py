@@ -51,7 +51,7 @@ def _heuristic_surface_assessment(card_image: np.ndarray) -> dict:
     bright_lines = cv2.morphologyEx(denoised, cv2.MORPH_TOPHAT, scratch_kernel)
     dark_lines = cv2.morphologyEx(denoised, cv2.MORPH_BLACKHAT, scratch_kernel)
     scratch_signal = (float(np.mean(bright_lines)) + float(np.mean(dark_lines))) / 255.0
-    scratch_probability = _clamp(scratch_signal * 4.0)
+    scratch_probability = _clamp(scratch_signal * 2.0)
 
     # Calculate discoloration on the border only (as the border should have uniform color)
     h, w = gray.shape
@@ -67,7 +67,7 @@ def _heuristic_surface_assessment(card_image: np.ndarray) -> dict:
     b_border = lab[:, :, 2][border_mask == 1]
     a_std = float(np.std(a_border)) if len(a_border) > 0 else 0.0
     b_std = float(np.std(b_border)) if len(b_border) > 0 else 0.0
-    discolor_probability = _clamp((a_std + b_std) / 80.0)
+    discolor_probability = _clamp((a_std + b_std) / 120.0)
 
     # Normal sharpness variance is typically 1000-4000. Only flag as noise if exceptionally high
     laplacian_variance = float(cv2.Laplacian(denoised, cv2.CV_64F).var())
